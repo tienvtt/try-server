@@ -5,9 +5,17 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
-from transformers import VivitConfig, VivitForVideoClassification
+from transformers import ViTConfig, ViTForVideoClassification
+
+# Define VideoDataset class
 class VideoDataset(Dataset):
     def __init__(self, root_dir, phase="train", transform=None, n_frames=None):
+        """
+        Args:
+        root_dir (string): Directory with all the videos (each video as a subdirectory of frames).
+        transform (callable, optional): Optional transform to be applied on a sample.
+        n_frames (int, optional): Number of frames to sample from each video, uniformly. If None, use all frames.
+        """
         self.root_dir = root_dir
         self.transform = transform
         self.n_frames = n_frames
@@ -25,6 +33,9 @@ class VideoDataset(Dataset):
 
             for video_path in video_paths:
                 video_folder = os.path.join(self.root_dir, self.phase, folder, video_path)
+                # Lists all files in the video folder.
+                # Sorts the frames based on the numeric part of their filenames.
+                # This is crucial to ensure the frames are in the correct temporal order.
                 frames = sorted(
                     (os.path.join(video_folder, f) for f in os.listdir(video_folder)),
                     key=lambda f: int("".join(filter(str.isdigit, os.path.basename(f)))),
@@ -53,18 +64,24 @@ class VideoDataset(Dataset):
         label = self.labels[idx]
         images = []
         for frame_path in video_frames:
+            # Opens each frame and converts it to RGB format
             image = Image.open(frame_path).convert("RGB")
             if self.transform:
                 image = self.transform(image)
             images.append(image)
 
+        # Stack images along new dimension (sequence length) (T, C, H, W)
         data = torch.stack(images, dim=0)
+
+        # Rearrange to have the shape (C, T, H, W)
         data = data.permute(1, 0, 2, 3)
         return data, label
+
+# Define model architecture
 class Model(nn.Module):
     def __init__(self, num_classes=2, image_size=720, num_frames=15):
         super(Model, self).__init__()
-        cfg = VivitConfig(
+        cfg = ViTConfig(
             num_classes=num_classes,
             image_size=image_size,
             num_frames=num_frames,
@@ -76,35 +93,29 @@ class Model(nn.Module):
             dropout_rate=0.1,
             initializer_range=0.02
         )
-        self.vivit = VivitForVideoClassification(config=cfg)
+
+        self.vit = ViTForVideoClassification(config=cfg)
 
     def forward(self, x_3d):
-        x_3d = x_3d.permute(0, 2, 1, 3, 4)  
-        out = self.vivit(x_3d)
+        x_3d = x_3d.permute(0, 2, 1, 3, 4)  # Ensure the input is in the shape (B, C, T, H, W)
+        out = self.vit(x_3d)
         return out.logits
 
-# Hyperparameters
+# Constants and hyperparameters
 BATCH_SIZE = 16
 MAX_LEN = 15
 IMAGE_SIZE = 720
 num_epochs = 50
 
-# Transforms
+# Define transforms
 transform = transforms.Compose([
     transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
     transforms.ToTensor(),
 ])
 
-# Command-line arguments for dataset paths
-import argparse
-parser = argparse.ArgumentParser(description='Train ViViT model for video classification')
-parser.add_argument('--train_dir', type=str, default='/path/to/train', help='Path to training data')
-parser.add_argument('--test_dir', type=str, default='/path/to/test', help='Path to testing data')
-args = parser.parse_args()
-
 # Load dataset
-train_dataset = VideoDataset(root_dir=args.train_dir, phase="train", transform=transform, n_frames=MAX_LEN)
-test_dataset = VideoDataset(root_dir=args.test_dir, phase="test", transform=transform, n_frames=MAX_LEN)
+train_dataset = VideoDataset(root_dir='/mnt/d/tienvo/dataset/train', phase="train", transform=transform, n_frames=MAX_LEN)
+test_dataset = VideoDataset(root_dir='/mnt/d/tienvo/dataset/test', phase="test", transform=transform, n_frames=MAX_LEN)
 
 # Count number of CPUs
 cpus = os.cpu_count()
@@ -114,8 +125,10 @@ print(f"Number of CPUs: {cpus}")
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=cpus, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, num_workers=cpus, shuffle=False)
 
-# Initialize model, optimizer, and loss function
+# Create an instance of the model
 model = Model()
+
+# Define loss function and optimizer
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -148,6 +161,6 @@ for epoch in range(num_epochs):
     # Print progress
     print(f"Epoch [{epoch+1}/{num_epochs}], Train Loss: {loss.item():.4f}, Test Loss: {test_loss:.4f}, Test Acc: {accuracy:.4f}")
 
-# Save trained model
-torch.save(model.state_dict(), 'trained_model.pth')
-print("Model saved successfully!")
+# Save the trained model
+torch.save(model.state_dict(), '/mnt/d/tienvo/trained_model.pth')
+print("Model saved successfully.")
