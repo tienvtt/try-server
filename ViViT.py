@@ -28,6 +28,15 @@ class CustomDataset(Dataset):
                     frames.append(frame_path)
                 self.data.append(frames)
                 self.labels.append(0 if label == 'normal' else 1)
+    
+
+        print(f"Root directory: {root_dir}")
+        for label in ['normal', 'restricted']:
+            label_dir = os.path.join(root_dir, label)
+            print(f"Label directory ({label}): {label_dir}")
+            if not os.path.exists(label_dir):
+                print(f"Directory {label_dir} does not exist.")
+
 
     def __len__(self):
         return len(self.data)
