@@ -134,8 +134,8 @@ def main():
     print(f"Number of CPUs: {cpus}")
 
     # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=cpus, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=cpus, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=4, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=4, shuffle=False)
 
     # Create an instance of the model
     model = Model()
