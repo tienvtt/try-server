@@ -59,24 +59,42 @@ class VideoDataset(Dataset):
 
     def __len__(self):
         return len(self.videos)
-
+    
     def __getitem__(self, idx):
         video_frames = self.videos[idx]
         label = self.labels[idx]
         images = []
         for frame_path in video_frames:
-            #Opens each frame and converts it to RGB format
-            image = Image.open(frame_path).convert("RGB")
-            if self.transform:
-                image = self.transform(image)
-            images.append(image)
+            try:
+                image = Image.open(frame_path).convert("RGB")
+                if self.transform:
+                    image = self.transform(image)
+                images.append(image)
+            except Exception as e:
+                print(f"Error processing file {frame_path}: {e}")
+                continue
 
-        # Stack images along new dimension (sequence length) (T, C, H, W)
-        data = torch.stack(images, dim=0)
-
-        # Rearrange to have the shape (C, T, H, W)
-        data = data.permute(1, 0, 2, 3)
+            data = torch.stack(images, dim=0)
+            data = data.permute(1, 0, 2, 3)
         return data, label
+
+    # def __getitem__(self, idx):
+    #     video_frames = self.videos[idx]
+    #     label = self.labels[idx]
+    #     images = []
+    #     for frame_path in video_frames:
+    #         #Opens each frame and converts it to RGB format
+    #         image = Image.open(frame_path).convert("RGB")
+    #         if self.transform:
+    #             image = self.transform(image)
+    #         images.append(image)
+
+    #     # Stack images along new dimension (sequence length) (T, C, H, W)
+    #     data = torch.stack(images, dim=0)
+
+    #     # Rearrange to have the shape (C, T, H, W)
+    #     data = data.permute(1, 0, 2, 3)
+    #     return data, label
 
 # Define Model class
 class Model(nn.Module):
