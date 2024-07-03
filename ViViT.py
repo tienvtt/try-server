@@ -103,9 +103,9 @@ class Model(nn.Module):
         return out.logits
 
 def main(dataset_path):
-    BATCH_SIZE = 16 # Try 8, 32, 64
+    BATCH_SIZE = 8 # Try 8, 32, 64
     MAX_LEN = 15 # Try 10, 20
-    IMAGE_SIZE = 720 # Try 224, 512
+    IMAGE_SIZE = 224 # Try 224, 512
     num_epochs = 5 # Try 25, 100
 
     # Define transforms
