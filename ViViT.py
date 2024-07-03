@@ -106,7 +106,7 @@ def main(dataset_path):
     BATCH_SIZE = 16 # Try 8, 32, 64
     MAX_LEN = 15 # Try 10, 20
     IMAGE_SIZE = 720 # Try 224, 512
-    num_epochs = 50 # Try 25, 100
+    num_epochs = 5 # Try 25, 100
 
     # Define transforms
     transform = transforms.Compose([
@@ -123,8 +123,8 @@ def main(dataset_path):
     print(f"Number of CPUs: {cpus}")
     
     # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=cpus, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, num_workers=cpus, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=4, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, num_workers=4, shuffle=False)
 
     # Create an instance of the model
     model = Model()
