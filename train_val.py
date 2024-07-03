@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from video_dataset import VideoDataset  # Import your VideoDataset class from video_dataset.py
 from model import Model  # Import your Model class from model.py
 
@@ -56,8 +56,12 @@ def main(dataset_path, batch_size, max_len, image_size, num_epochs, learning_rat
 
             val_loss /= len(val_loader)
             val_acc = accuracy_score(all_labels, all_preds)
+            val_precision = precision_score(all_labels, all_preds, average='macro')
+            val_recall = recall_score(all_labels, all_preds, average='macro')
+            val_f1 = f1_score(all_labels, all_preds, average='macro')
 
-        print(f"Epoch [{epoch+1}/{num_epochs}], Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+        print(f"Epoch [{epoch+1}/{num_epochs}], Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, "
+              f"Val Precision: {val_precision:.4f}, Val Recall: {val_recall:.4f}, Val F1: {val_f1:.4f}")
 
     # Save the trained model
     torch.save(model.state_dict(), 'trained_model.pth')

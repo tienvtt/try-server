@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from video_dataset import VideoDataset  # Import your VideoDataset class from video_dataset.py
 from model import Model  # Import your Model class from model.py
 
@@ -42,8 +42,12 @@ def main(dataset_path, batch_size, max_len, image_size):
 
         test_loss /= len(test_loader)
         test_acc = accuracy_score(all_labels, all_preds)
+        test_precision = precision_score(all_labels, all_preds, average='macro')
+        test_recall = recall_score(all_labels, all_preds, average='macro')
+        test_f1 = f1_score(all_labels, all_preds, average='macro')
 
-    print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}")
+    print(f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}, Test Precision: {test_precision:.4f}, "
+          f"Test Recall: {test_recall:.4f}, Test F1: {test_f1:.4f}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ViViT Video Classification - Test")
