@@ -57,11 +57,11 @@ class VideoDataset(Dataset):
         return data, label
 
 class Model(nn.Module):
-    def __init__(self, num_classes=2, image_size=(224, 224), num_frames=10):
+    def __init__(self, num_classes=2, image_size=224, num_frames=10):
         super(Model, self).__init__()
         cfg = VivitConfig(
             num_classes=num_classes,
-            image_size=image_size,  # Ensure this is a tuple
+            image_size=image_size,  # Ensure this is an int
             num_frames=num_frames,
             patch_size=16,
             hidden_size=768,
@@ -81,10 +81,10 @@ class Model(nn.Module):
 def main(dataset_path):
     BATCH_SIZE = 4  # Reduced batch size
     MAX_LEN = 10  # Reduced number of frames
-    IMAGE_SIZE = (224, 224)  # Ensure this is a tuple
+    IMAGE_SIZE = 224  # Ensure this is an int
     num_epochs = 50
     transform = transforms.Compose([
-        transforms.Resize(IMAGE_SIZE),
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
         transforms.ToTensor(),
     ])
     train_dataset = VideoDataset(root_dir=dataset_path, phase="train", transform=transform, n_frames=MAX_LEN)
