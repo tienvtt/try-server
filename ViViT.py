@@ -1,15 +1,22 @@
 import os
+import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
-from transformers import ViTConfig, ViTModel
+from transformers import VivitConfig, VivitForVideoClassification
 
 # Define VideoDataset class
 class VideoDataset(Dataset):
     def __init__(self, root_dir, phase="train", transform=None, n_frames=None):
+        """
+        Args:
+        root_dir (string): Directory with all the videos (each video as a subdirectory of frames).
+        transform (callable, optional): Optional transform to be applied on a sample.
+        n_frames (int, optional): Number of frames to sample from each video, uniformly. If None, use all frames.
+        """
         self.root_dir = root_dir
         self.transform = transform
         self.n_frames = n_frames
@@ -27,6 +34,9 @@ class VideoDataset(Dataset):
 
             for video_path in video_paths:
                 video_folder = os.path.join(self.root_dir, self.phase, folder, video_path)
+                # Lists all files in the video folder.
+                # Sorts the frames based on the numeric part of their filenames.
+                # This is crucial to ensure the frames are in the correct temporal order.
                 frames = sorted(
                     (os.path.join(video_folder, f) for f in os.listdir(video_folder)),
                     key=lambda f: int("".join(filter(str.isdigit, os.path.basename(f)))),
@@ -55,20 +65,27 @@ class VideoDataset(Dataset):
         label = self.labels[idx]
         images = []
         for frame_path in video_frames:
+            #Opens each frame and converts it to RGB format
             image = Image.open(frame_path).convert("RGB")
             if self.transform:
                 image = self.transform(image)
             images.append(image)
 
+        # Stack images along new dimension (sequence length) (T, C, H, W)
         data = torch.stack(images, dim=0)
+
+        # Rearrange to have the shape (C, T, H, W)
         data = data.permute(1, 0, 2, 3)
         return data, label
 
-# Model definition
-class VideoClassificationModel(nn.Module):
+class Model(nn.Module):
     def __init__(self, num_classes=2, image_size=720, num_frames=15):
-        super(VideoClassificationModel, self).__init__()
-        self.config = ViTConfig(
+        super(Model, self).__init__()
+        cfg = VivitConfig(
+            num_classes=num_classes,
+            image_size=image_size,
+            num_frames=num_frames,
+            patch_size = 16,
             hidden_size=768,
             num_attention_heads=12,
             num_hidden_layers=12,
@@ -77,85 +94,88 @@ class VideoClassificationModel(nn.Module):
             initializer_range=0.02
         )
 
-        self.vit = ViTModel(config=self.config)
+        self.vivit = VivitForVideoClassification(config=cfg)
 
-        # Additional layers for classification
-        self.fc = nn.Linear(self.config.hidden_size, num_classes)
+    #Expects a 5D tensor representing a batch of videos.
+    def forward(self, x_3d):
+        x_3d = x_3d.permute(0, 2, 1, 3, 4)  # Ensure the input is in the shape (B, C, T, H, W)
+        out = self.vivit(x_3d)
+        return out.logits
 
-    def forward(self, x):
-        x = x.view(-1, num_frames, 3, image_size, image_size)  # Reshape input to (batch_size, num_frames, channels, height, width)
-        x = x.permute(0, 2, 1, 3, 4)  # Permute to (batch_size, channels, num_frames, height, width)
-        outputs = self.vit(x)
-        last_hidden_state = outputs.last_hidden_state
-        logits = self.fc(last_hidden_state[:, 0])  # Use only the first token's output for classification
-        return logits
+def main(dataset_path):
+    BATCH_SIZE = 16 # Try 8, 32, 64
+    MAX_LEN = 15 # Try 10, 20
+    IMAGE_SIZE = 720 # Try 224, 512
+    num_epochs = 50 # Try 25, 100
 
-# Hyperparameters
-BATCH_SIZE = 16
-MAX_LEN = 15
-IMAGE_SIZE = 720
-num_epochs = 50
+    # Define transforms
+    transform = transforms.Compose([
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.ToTensor(),
+    ])
 
-# Data transformations
-transform = transforms.Compose([
-    transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-    transforms.ToTensor(),
-])
+    # Load dataset
+    train_dataset = VideoDataset(root_dir=dataset_path, phase="train", transform=transform, n_frames=MAX_LEN)
+    test_dataset = VideoDataset(root_dir=dataset_path, phase="test", transform=transform, n_frames=MAX_LEN)
+    
+    # Count number of CPUs
+    cpus = os.cpu_count()
+    print(f"Number of CPUs: {cpus}")
+    
+    # Create data loaders
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=cpus, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, num_workers=cpus, shuffle=False)
 
-# Load datasets
-train_dataset = VideoDataset(root_dir='/mnt/d/tienvo/dataset', phase="train", transform=transform, n_frames=MAX_LEN)
-test_dataset = VideoDataset(root_dir='/mnt/d/tienvo/dataset', phase="test", transform=transform, n_frames=MAX_LEN)
+    # Create an instance of the model
+    model = Model()
 
-# Count number of CPUs for DataLoader
-cpus = os.cpu_count()
-print(f"Number of CPUs: {cpus}")
+    # Define loss function and optimizer
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001) # Try 0.01, 0.0001
 
-# Create data loaders
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=cpus, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, num_workers=cpus, shuffle=False)
+    # Training loop
+    for epoch in range(num_epochs):
+        model.train()
+        for inputs, labels in train_loader:
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
 
-# Initialize model, optimizer, and loss function
-model = VideoClassificationModel()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-criterion = nn.CrossEntropyLoss()
+        # Validation loop
+        model.eval()
+        with torch.no_grad():
+            test_loss = 0.0
+            correct = 0
+            total = 0
+            for inputs, labels in test_loader:
+                outputs = model(inputs)
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+                test_loss += criterion(outputs, labels).item()
 
-# Training loop
-for epoch in range(num_epochs):
-    model.train()
-    for inputs, labels in train_loader:
-        optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
+            test_loss /= len(test_loader)
+            accuracy = correct / total
 
-    # Validation loop
+        # Print progress
+        print(f"Epoch [{epoch+1}/{num_epochs}], Train Loss: {loss.item():.4f}, test Loss: {test_loss:.4f}, Test Acc: {accuracy:.4f}")
+
+    # Save the trained model
+    torch.save(model.state_dict(), 'trained_model.pth')
+
     model.eval()
     with torch.no_grad():
-        test_loss = 0.0
-        correct = 0
-        total = 0
         for inputs, labels in test_loader:
             outputs = model(inputs)
             _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-            test_loss += criterion(outputs, labels).item()
+            for i in range(len(predicted)):
+                print(f"Actual: {labels[i]}, Predicted: {predicted[i]}")
 
-        test_loss /= len(test_loader)
-        accuracy = correct / total
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Video classification using ViViT")
+    parser.add_argument("dataset_path", type=str, help="Path to the dataset directory")
+    args = parser.parse_args()
 
-    # Print progress
-    print(f"Epoch [{epoch+1}/{num_epochs}], Train Loss: {loss.item():.4f}, Test Loss: {test_loss:.4f}, Test Acc: {accuracy:.4f}")
-
-# Save the trained model
-torch.save(model.state_dict(), 'trained_model.pth')
-
-# Final evaluation
-model.eval()
-with torch.no_grad():
-    for inputs, labels in test_loader:
-        outputs = model(inputs)
-        _, predicted = torch.max(outputs, 1)
-        for i in range(len(predicted)):
-            print(f"Actual: {labels[i]}, Predicted: {predicted[i]}")
+    main(args.dataset_path)
