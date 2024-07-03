@@ -91,6 +91,8 @@ def main(dataset_path):
     test_dataset = VideoDataset(root_dir=dataset_path, phase="test", transform=transform, n_frames=MAX_LEN)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=4, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, num_workers=4, shuffle=False)
+    print(f"Train Dataset Length: {len(train_dataset)}, Test Dataset Length: {len(test_dataset)}")
+    print(f"Train Loader Length: {len(train_loader)}, Test Loader Length: {len(test_loader)}")
     model = Model()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
