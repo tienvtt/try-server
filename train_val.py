@@ -10,7 +10,7 @@ from sklearn.metrics import precision_recall_fscore_support
 from video_dataset import VideoDataset  # Import your VideoDataset class from video_dataset.py
 from model import Model  # Import your Model class from model.py
 
-def validate(model, criterion, val_loader):
+def validate(model, criterion, val_loader, device):
     model.eval()
     val_loss = 0.0
     val_correct = 0
@@ -20,6 +20,8 @@ def validate(model, criterion, val_loader):
 
     with torch.no_grad():
         for inputs, labels in val_loader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             val_loss += loss.item()
@@ -42,6 +44,9 @@ def validate(model, criterion, val_loader):
     return val_loss, val_accuracy, val_precision, val_recall, val_f1
 
 def main(dataset_path, batch_size, max_len, image_size, num_epochs, learning_rate):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
     # Define transforms
     transform = transforms.Compose([
         transforms.Resize((image_size, image_size)),
@@ -61,7 +66,7 @@ def main(dataset_path, batch_size, max_len, image_size, num_epochs, learning_rat
     print(f"Train Loader Length: {len(train_loader)}, Val Loader Length: {len(val_loader)}, Test Loader Length: {len(test_loader)}")
 
     # Initialize model, loss function, and optimizer
-    model = Model()
+    model = Model().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -69,6 +74,8 @@ def main(dataset_path, batch_size, max_len, image_size, num_epochs, learning_rat
     for epoch in range(num_epochs):
         model.train()
         for inputs, labels in train_loader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
@@ -76,7 +83,7 @@ def main(dataset_path, batch_size, max_len, image_size, num_epochs, learning_rat
             optimizer.step()
 
         # Validation after each epoch
-        val_loss, val_accuracy, val_precision, val_recall, val_f1 = validate(model, criterion, val_loader)
+        val_loss, val_accuracy, val_precision, val_recall, val_f1 = validate(model, criterion, val_loader, device)
 
         print(f"Epoch [{epoch + 1}/{num_epochs}], "
               f"Val Loss: {val_loss:.4f}, "
@@ -87,7 +94,7 @@ def main(dataset_path, batch_size, max_len, image_size, num_epochs, learning_rat
 
     # Testing
     model.eval()
-    test_loss, test_accuracy, test_precision, test_recall, test_f1 = validate(model, criterion, test_loader)
+    test_loss, test_accuracy, test_precision, test_recall, test_f1 = validate(model, criterion, test_loader, device)
 
     print(f"Test Loss: {test_loss:.4f}, "
           f"Test Acc: {test_accuracy:.4f}, "
